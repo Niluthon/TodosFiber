@@ -40,8 +40,8 @@ type ListTodosQuery struct {
 
 // CreateTodoInput is the data the service needs to create a task.
 type CreateTodoInput struct {
-	Title   string
-	Status  TodoStatus
+	Title   string     `validate:"notblank,max=200"`
+	Status  TodoStatus `validate:"omitempty,oneof=pending done"`
 	DueDate *time.Time
 }
 
@@ -49,8 +49,8 @@ type CreateTodoInput struct {
 // A nil pointer means "leave unchanged"; ClearDueDate explicitly removes the date.
 type UpdateTodoInput struct {
 	ID           uint
-	Title        *string
-	Status       *TodoStatus
+	Title        *string     `validate:"omitempty,notblank,max=200"`
+	Status       *TodoStatus `validate:"omitempty,oneof=pending done"`
 	DueDate      *time.Time
 	ClearDueDate bool
 }
@@ -60,6 +60,23 @@ type ListFilter struct {
 	Status TodoStatus
 	Page   int
 	Limit  int
+}
+
+// ---------------------------------------------------------------------------
+// Persistence DTO (service <-> repository).
+// ---------------------------------------------------------------------------
+
+// TodoDto is the persistence-agnostic representation of a todo exchanged
+// between the service and repository layers. Unlike the Todo GORM model, it has
+// no database tags and no ORM hooks, so the service never has to know how (or
+// where) a todo is stored. The repository owns translating it to and from the
+// ORM model.
+type TodoDto struct {
+	ID        uint
+	Title     string
+	Status    TodoStatus
+	DueDate   *time.Time
+	CreatedAt time.Time
 }
 
 // ---------------------------------------------------------------------------
@@ -131,8 +148,8 @@ func (q *ListTodosQuery) ToFilter() ListFilter {
 	return filter
 }
 
-// toTodoResponse maps a Todo entity into the API response DTO.
-func toTodoResponse(t *Todo) TodoResponse {
+// toTodoResponse maps a persistence DTO into the API response DTO.
+func toTodoResponse(t TodoDto) TodoResponse {
 	resp := TodoResponse{
 		ID:        t.ID,
 		Title:     t.Title,
@@ -146,10 +163,10 @@ func toTodoResponse(t *Todo) TodoResponse {
 	return resp
 }
 
-func toTodoResponses(todos []Todo) []TodoResponse {
+func toTodoResponses(todos []TodoDto) []TodoResponse {
 	responses := make([]TodoResponse, 0, len(todos))
 	for i := range todos {
-		responses = append(responses, toTodoResponse(&todos[i]))
+		responses = append(responses, toTodoResponse(todos[i]))
 	}
 	return responses
 }
