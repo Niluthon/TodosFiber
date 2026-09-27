@@ -8,19 +8,14 @@ import (
 	"github.com/gofiber/fiber/v3"
 )
 
-type TodoHandlerInterface interface {
-	Create(c fiber.Ctx) error
-	Update(c fiber.Ctx) error
-	Delete(c fiber.Ctx) error
-	Get(c fiber.Ctx) error
-	List(c fiber.Ctx) error
-}
-
+// TodoHandler adapts HTTP requests to TodoServiceInterface calls. It owns only transport
+// concerns: binding, validation and mapping errors to status codes.
 type TodoHandler struct {
-	service ServiceInterface
+	service TodoServiceInterface
 }
 
-func NewTodoHandler(service ServiceInterface) *TodoHandler {
+// NewTodoHandler returns a TodoHandler that delegates to the TodoServiceInterface port.
+func NewTodoHandler(service TodoServiceInterface) *TodoHandler {
 	return &TodoHandler{service: service}
 }
 
@@ -43,7 +38,7 @@ func (h *TodoHandler) Create(c fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(resp)
 }
 
-// List handles GET /tasks (supports ?status=, ?page=, ?limit=).
+// List handles GET /tasks (supports ?status=, ?page= and ?limit=).
 func (h *TodoHandler) List(c fiber.Ctx) error {
 	query := new(ListTodosQuery)
 	if err := c.Bind().Query(query); err != nil {
@@ -117,7 +112,8 @@ func parseID(c fiber.Ctx) (uint, error) {
 	return uint(id), nil
 }
 
-// respondError maps service/repository errors onto HTTP status codes.
+// respondError maps sentinel errors from the service/repository onto HTTP
+// status codes. Unknown errors never leak internal details to the client.
 func respondError(c fiber.Ctx, err error) error {
 	switch {
 	case errors.Is(err, ErrNotFound):

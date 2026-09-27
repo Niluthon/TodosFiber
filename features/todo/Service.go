@@ -7,11 +7,10 @@ import (
 )
 
 // ErrValidation marks input that is well-formed but breaks a business rule.
-// The handler turns it into an HTTP 400.
+// Callers should test for it with errors.Is; the HTTP layer maps it to 400.
 var ErrValidation = errors.New("validation error")
 
-// ServiceInterface holds the business logic and is independent of HTTP/GORM.
-type ServiceInterface interface {
+type TodoServiceInterface interface {
 	Create(input CreateTodoInput) (TodoResponse, error)
 	Update(input UpdateTodoInput) (TodoResponse, error)
 	Delete(id uint) error
@@ -19,16 +18,24 @@ type ServiceInterface interface {
 	List(filter ListFilter) ([]TodoResponse, error)
 }
 
-type service struct {
-	repo RepositoryInterface
+// TodoService implements the TodoServiceInterface port using the todo business rules. It
+// has no knowledge of HTTP or of the concrete storage engine.
+type TodoService struct {
+	repo TodoRepositoryInterface
 }
 
-// NewTodoService builds the service on top of a repository dependency.
-func NewTodoService(repo RepositoryInterface) ServiceInterface {
-	return &service{repo: repo}
+// TodoService must satisfy the TodoServiceInterface interface the handler depends on. This
+// is an explicit compile-time check: if a method signature ever drifts, the
+// package stops building here instead of failing later at the call site.
+var _ TodoServiceInterface = (*TodoService)(nil)
+
+// NewService returns a TodoServiceInterface that persists through repo.
+func NewService(repo TodoRepositoryInterface) TodoServiceInterface {
+	return &TodoService{repo: repo}
 }
 
-func (s *service) Create(input CreateTodoInput) (TodoResponse, error) {
+// Create validates input and stores a new todo.
+func (s *TodoService) Create(input CreateTodoInput) (TodoResponse, error) {
 	if strings.TrimSpace(input.Title) == "" {
 		return TodoResponse{}, fmt.Errorf("%w: title is required", ErrValidation)
 	}
@@ -52,13 +59,14 @@ func (s *service) Create(input CreateTodoInput) (TodoResponse, error) {
 	return toTodoResponse(t), nil
 }
 
-func (s *service) Update(input UpdateTodoInput) (TodoResponse, error) {
+// Update applies a partial update to an existing todo.
+func (s *TodoService) Update(input UpdateTodoInput) (TodoResponse, error) {
 	t, err := s.repo.GetByID(input.ID)
 	if err != nil {
 		return TodoResponse{}, err
 	}
 
-	// Apply the patch: only fields that were actually sent are touched.
+	// Only fields that were actually sent are touched.
 	if input.Title != nil {
 		if strings.TrimSpace(*input.Title) == "" {
 			return TodoResponse{}, fmt.Errorf("%w: title cannot be empty", ErrValidation)
@@ -84,11 +92,13 @@ func (s *service) Update(input UpdateTodoInput) (TodoResponse, error) {
 	return toTodoResponse(t), nil
 }
 
-func (s *service) Delete(id uint) error {
+// Delete removes a todo by id.
+func (s *TodoService) Delete(id uint) error {
 	return s.repo.Delete(id)
 }
 
-func (s *service) Get(id uint) (TodoResponse, error) {
+// Get returns a single todo by id.
+func (s *TodoService) Get(id uint) (TodoResponse, error) {
 	t, err := s.repo.GetByID(id)
 	if err != nil {
 		return TodoResponse{}, err
@@ -96,7 +106,8 @@ func (s *service) Get(id uint) (TodoResponse, error) {
 	return toTodoResponse(t), nil
 }
 
-func (s *service) List(filter ListFilter) ([]TodoResponse, error) {
+// List returns the todos that match filter.
+func (s *TodoService) List(filter ListFilter) ([]TodoResponse, error) {
 	todos, err := s.repo.List(filter)
 	if err != nil {
 		return nil, err
@@ -104,8 +115,8 @@ func (s *service) List(filter ListFilter) ([]TodoResponse, error) {
 	return toTodoResponses(todos), nil
 }
 
-// ensureDoneHasTitle enforces the assignment rule: a task cannot be marked
-// "done" if it has no title.
+// ensureDoneHasTitle enforces the rule that a task cannot be marked "done"
+// without a title.
 func ensureDoneHasTitle(title string, status TodoStatus) error {
 	if status == Done && strings.TrimSpace(title) == "" {
 		return fmt.Errorf("%w: a task cannot be marked as done without a title", ErrValidation)

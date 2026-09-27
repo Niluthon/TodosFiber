@@ -28,7 +28,7 @@ func main() {
 
 	// Wire the layers: database -> repository -> service -> handler.
 	repo := todo.NewTodoRepository(db)
-	svc := todo.NewTodoService(repo)
+	svc := todo.NewService(repo)
 	handler := todo.NewTodoHandler(svc)
 
 	app := fiber.New(
