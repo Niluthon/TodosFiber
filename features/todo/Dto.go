@@ -9,60 +9,6 @@ import (
 const dateLayout = "2006-01-02"
 
 // ---------------------------------------------------------------------------
-// HTTP request DTOs (bound from the request body/query and validated).
-// ---------------------------------------------------------------------------
-
-// CreateTodoRequest is the payload accepted by POST /tasks.
-type CreateTodoRequest struct {
-	Title   string     `json:"title" form:"title" validate:"required,max=200"`
-	Status  TodoStatus `json:"status" form:"status" validate:"omitempty,oneof=pending done"`
-	DueDate *string    `json:"due_date" form:"due_date"`
-}
-
-// UpdateTodoRequest is the payload accepted by PATCH /tasks/:id. Pointers are
-// used so the handler can tell "field omitted" apart from "field set to zero".
-type UpdateTodoRequest struct {
-	Title   *string     `json:"title" form:"title" validate:"omitempty,min=1,max=200"`
-	Status  *TodoStatus `json:"status" form:"status" validate:"omitempty,oneof=pending done"`
-	DueDate *string     `json:"due_date" form:"due_date"`
-}
-
-// ListTodosQuery holds the supported query parameters for GET /tasks.
-type ListTodosQuery struct {
-	Status TodoStatus `query:"status" validate:"omitempty,oneof=pending done"`
-	Page   int        `query:"page" validate:"omitempty,min=1"`
-	Limit  int        `query:"limit" validate:"omitempty,min=1,max=100"`
-}
-
-// ---------------------------------------------------------------------------
-// Service-layer DTOs (handler -> service).
-// ---------------------------------------------------------------------------
-
-// CreateTodoInput is the data the service needs to create a task.
-type CreateTodoInput struct {
-	Title   string     `validate:"notblank,max=200"`
-	Status  TodoStatus `validate:"omitempty,oneof=pending done"`
-	DueDate *time.Time
-}
-
-// UpdateTodoInput is the data the service needs to patch a task.
-// A nil pointer means "leave unchanged"; ClearDueDate explicitly removes the date.
-type UpdateTodoInput struct {
-	ID           uint
-	Title        *string     `validate:"omitempty,notblank,max=200"`
-	Status       *TodoStatus `validate:"omitempty,oneof=pending done"`
-	DueDate      *time.Time
-	ClearDueDate bool
-}
-
-// ListFilter carries list options from the handler into the service/repository.
-type ListFilter struct {
-	Status TodoStatus
-	Page   int
-	Limit  int
-}
-
-// ---------------------------------------------------------------------------
 // Persistence DTO (service <-> repository).
 // ---------------------------------------------------------------------------
 
@@ -96,6 +42,8 @@ type TodoResponse struct {
 // Mappers.
 // ---------------------------------------------------------------------------
 
+// parseDueDate parses a date-only wire value. Failures are wrapped in
+// ErrValidation so the HTTP layer maps them to 400.
 func parseDueDate(value string) (*time.Time, error) {
 	t, err := time.Parse(dateLayout, value)
 	if err != nil {
@@ -104,41 +52,41 @@ func parseDueDate(value string) (*time.Time, error) {
 	return &t, nil
 }
 
-// ToInput converts a create request into a service input DTO.
-func (r *CreateTodoRequest) ToInput() (CreateTodoInput, error) {
-	input := CreateTodoInput{Title: r.Title, Status: r.Status}
-	if r.DueDate != nil && *r.DueDate != "" {
-		due, err := parseDueDate(*r.DueDate)
-		if err != nil {
-			return CreateTodoInput{}, err
-		}
-		input.DueDate = due
+// parseOptionalDueDate parses an optional date-only wire value. A nil or empty
+// value means "no due date".
+func parseOptionalDueDate(value *string) (*time.Time, error) {
+	if value == nil || *value == "" {
+		return nil, nil
 	}
-	return input, nil
+	return parseDueDate(*value)
 }
 
-// ToInput converts a patch request into a service input DTO. An empty due_date
-// string is treated as an explicit request to clear the date.
-func (r *UpdateTodoRequest) ToInput(id uint) (UpdateTodoInput, error) {
-	input := UpdateTodoInput{ID: id, Title: r.Title, Status: r.Status}
-	if r.DueDate != nil {
-		if *r.DueDate == "" {
-			input.ClearDueDate = true
-		} else {
-			due, err := parseDueDate(*r.DueDate)
-			if err != nil {
-				return UpdateTodoInput{}, err
-			}
-			input.DueDate = due
-		}
+// toModel maps the persistence DTO onto the GORM model. It is the only place
+// that couples the domain representation to the ORM type.
+func toModel(dto TodoDto) *Todo {
+	return &Todo{
+		ID:        dto.ID,
+		Title:     dto.Title,
+		Status:    dto.Status,
+		DueDate:   dto.DueDate,
+		CreatedAt: dto.CreatedAt,
 	}
-	return input, nil
 }
 
-// ToFilter converts validated query parameters into a list filter, applying
-// sane defaults for pagination.
-func (q *ListTodosQuery) ToFilter() ListFilter {
-	filter := ListFilter{Status: q.Status, Page: q.Page, Limit: q.Limit}
+// toDto maps a GORM model back into the persistence DTO.
+func toDto(model *Todo) TodoDto {
+	return TodoDto{
+		ID:        model.ID,
+		Title:     model.Title,
+		Status:    model.Status,
+		DueDate:   model.DueDate,
+		CreatedAt: model.CreatedAt,
+	}
+}
+
+// ToFilter applies sane defaults for pagination.
+func (q *ListTodosQuery) ToFilter() ListTodosQuery {
+	filter := ListTodosQuery{Status: q.Status, Page: q.Page, Limit: q.Limit}
 	if filter.Page < 1 {
 		filter.Page = 1
 	}
@@ -163,7 +111,8 @@ func toTodoResponse(t TodoDto) TodoResponse {
 	return resp
 }
 
-func toTodoResponses(todos []TodoDto) []TodoResponse {
+// toTodoList maps a slice of persistence DTOs into response DTOs.
+func toTodoList(todos []TodoDto) []TodoResponse {
 	responses := make([]TodoResponse, 0, len(todos))
 	for i := range todos {
 		responses = append(responses, toTodoResponse(todos[i]))

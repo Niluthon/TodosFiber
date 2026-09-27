@@ -26,14 +26,21 @@ func main() {
 		log.Fatalf("failed to migrate database: %v", err)
 	}
 
+	// Build one validator shared by Fiber request binding and the service's
+	// business-rule validation so both layers agree on the rules.
+	validate, err := todo.NewValidator()
+	if err != nil {
+		log.Fatalf("failed to build validator: %v", err)
+	}
+
 	// Wire the layers: database -> repository -> service -> handler.
 	repo := todo.NewTodoRepository(db)
-	svc := todo.NewService(repo)
+	svc := todo.NewService(repo, validate)
 	handler := todo.NewTodoHandler(svc)
 
 	app := fiber.New(
 		fiber.Config{
-			StructValidator: &structValidator{validator: validator.New()},
+			StructValidator: &structValidator{validator: validate},
 		},
 	)
 	app.Use(logger.New())

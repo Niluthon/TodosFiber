@@ -26,12 +26,7 @@ func (h *TodoHandler) Create(c fiber.Ctx) error {
 		return respondBadRequest(c, "invalid request body", err)
 	}
 
-	input, err := req.ToInput()
-	if err != nil {
-		return respondError(c, err)
-	}
-
-	resp, err := h.service.Create(input)
+	resp, err := h.service.Create(*req)
 	if err != nil {
 		return respondError(c, err)
 	}
@@ -77,13 +72,9 @@ func (h *TodoHandler) Update(c fiber.Ctx) error {
 	if err := c.Bind().Body(req); err != nil {
 		return respondBadRequest(c, "invalid request body", err)
 	}
+	req.ID = id
 
-	input, err := req.ToInput(id)
-	if err != nil {
-		return respondError(c, err)
-	}
-
-	resp, err := h.service.Update(input)
+	resp, err := h.service.Update(*req)
 	if err != nil {
 		return respondError(c, err)
 	}
