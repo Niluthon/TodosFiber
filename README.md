@@ -72,6 +72,7 @@ curl -X POST localhost:8000/tasks \
 - Move routes to separate file (makes project cleaner) and group them by API versions.
 - Refactor error handling to be more consistent and use custom error types with proper error messages.
 - Add Fake data generator for testing purposes (PHP Faker alternative in Golang).
+- Check naming conventions, fix them if needed to follow GoLang best practices.
 
 ## Assumptions
 
