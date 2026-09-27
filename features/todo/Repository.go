@@ -11,17 +11,21 @@ import (
 // Callers should test for it with errors.Is.
 var ErrNotFound = errors.New("todo not found")
 
+// TodoRepositoryInterface is the storage port the service depends on. It speaks
+// exclusively in persistence-agnostic TodoDto values so the service never sees
+// the GORM model. The concrete adapter is responsible for all ORM mapping.
 type TodoRepositoryInterface interface {
-	Create(todo *Todo) error
-	Update(todo *Todo) error
+	Create(todo TodoDto) (TodoDto, error)
+	Update(todo TodoDto) (TodoDto, error)
 	Delete(id uint) error
-	GetByID(id uint) (*Todo, error)
-	List(filter ListFilter) ([]Todo, error)
+	GetByID(id uint) (TodoDto, error)
+	List(filter ListFilter) ([]TodoDto, error)
 }
 
 // TodoRepository is the GORM-backed adapter for the TodoRepositoryInterface port. The
 // database handle is injected through NewTodoRepository, keeping the storage
-// engine replaceable and the type easy to fake in tests.
+// engine replaceable and the type easy to fake in tests. It is also the only
+// place in the package that knows about the Todo ORM model.
 type TodoRepository struct {
 	db *gorm.DB
 }
@@ -36,20 +40,48 @@ func NewTodoRepository(db *gorm.DB) *TodoRepository {
 	return &TodoRepository{db: db}
 }
 
-// Create inserts t and fills in its generated fields (ID, CreatedAt).
-func (r *TodoRepository) Create(t *Todo) error {
-	if err := r.db.Create(t).Error; err != nil {
-		return fmt.Errorf("create todo: %w", err)
+// toModel builds a GORM model from the persistence DTO. It is the only place a
+// Todo record is constructed, keeping ORM details out of the service layer.
+func toModel(dto TodoDto) *Todo {
+	return &Todo{
+		ID:        dto.ID,
+		Title:     dto.Title,
+		Status:    dto.Status,
+		DueDate:   dto.DueDate,
+		CreatedAt: dto.CreatedAt,
 	}
-	return nil
 }
 
-// Update persists every field of t.
-func (r *TodoRepository) Update(t *Todo) error {
-	if err := r.db.Save(t).Error; err != nil {
-		return fmt.Errorf("update todo %d: %w", t.ID, err)
+// toDto maps a GORM model back into the persistence DTO. It is the only place an
+// ORM record is exposed to the service layer.
+func toDto(t *Todo) TodoDto {
+	return TodoDto{
+		ID:        t.ID,
+		Title:     t.Title,
+		Status:    t.Status,
+		DueDate:   t.DueDate,
+		CreatedAt: t.CreatedAt,
 	}
-	return nil
+}
+
+// Create inserts a new todo built from dto and returns it with the generated
+// fields (ID, CreatedAt, and any database defaults) populated.
+func (r *TodoRepository) Create(dto TodoDto) (TodoDto, error) {
+	model := toModel(dto)
+	if err := r.db.Create(model).Error; err != nil {
+		return TodoDto{}, fmt.Errorf("create todo: %w", err)
+	}
+	return toDto(model), nil
+}
+
+// Update persists every field of the todo built from dto and returns the stored
+// representation.
+func (r *TodoRepository) Update(dto TodoDto) (TodoDto, error) {
+	model := toModel(dto)
+	if err := r.db.Save(model).Error; err != nil {
+		return TodoDto{}, fmt.Errorf("update todo %d: %w", dto.ID, err)
+	}
+	return toDto(model), nil
 }
 
 // Delete removes the todo with the given id. It returns ErrNotFound when no
@@ -65,21 +97,21 @@ func (r *TodoRepository) Delete(id uint) error {
 	return nil
 }
 
-// GetByID returns the todo with the given id, or ErrNotFound.
-func (r *TodoRepository) GetByID(id uint) (*Todo, error) {
-	var t Todo
-	if err := r.db.First(&t, id).Error; err != nil {
+// GetByID returns the todo with the given id as a DTO, or ErrNotFound.
+func (r *TodoRepository) GetByID(id uint) (TodoDto, error) {
+	var model Todo
+	if err := r.db.First(&model, id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, ErrNotFound
+			return TodoDto{}, ErrNotFound
 		}
-		return nil, fmt.Errorf("get todo %d: %w", id, err)
+		return TodoDto{}, fmt.Errorf("get todo %d: %w", id, err)
 	}
-	return &t, nil
+	return toDto(&model), nil
 }
 
 // List returns todos newest first, optionally filtered by status and paginated.
 // A filter with Limit <= 0 returns every match.
-func (r *TodoRepository) List(filter ListFilter) ([]Todo, error) {
+func (r *TodoRepository) List(filter ListFilter) ([]TodoDto, error) {
 	if filter.Page < 1 {
 		filter.Page = 1
 	}
@@ -94,9 +126,14 @@ func (r *TodoRepository) List(filter ListFilter) ([]Todo, error) {
 		query = query.Offset((filter.Page - 1) * filter.Limit).Limit(filter.Limit)
 	}
 
-	var todos []Todo
-	if err := query.Find(&todos).Error; err != nil {
+	var models []Todo
+	if err := query.Find(&models).Error; err != nil {
 		return nil, fmt.Errorf("list todos: %w", err)
 	}
-	return todos, nil
+
+	dtos := make([]TodoDto, 0, len(models))
+	for i := range models {
+		dtos = append(dtos, toDto(&models[i]))
+	}
+	return dtos, nil
 }
