@@ -13,7 +13,7 @@ const dateLayout = "2006-01-02"
 // ---------------------------------------------------------------------------
 
 // TodoDto is the persistence-agnostic representation of a todo exchanged
-// between the service and repository layers. Unlike the Todo GORM model, it has
+// between the service and repository layers. Unlike the TodoGorm GORM model, it has
 // no database tags and no ORM hooks, so the service never has to know how (or
 // where) a todo is stored. The repository owns translating it to and from the
 // ORM model.
@@ -63,8 +63,8 @@ func parseOptionalDueDate(value *string) (*time.Time, error) {
 
 // toModel maps the persistence DTO onto the GORM model. It is the only place
 // that couples the domain representation to the ORM type.
-func toModel(dto TodoDto) *Todo {
-	return &Todo{
+func toModel(dto TodoDto) *TodoGorm {
+	return &TodoGorm{
 		ID:        dto.ID,
 		Title:     dto.Title,
 		Status:    dto.Status,
@@ -74,7 +74,7 @@ func toModel(dto TodoDto) *Todo {
 }
 
 // toDto maps a GORM model back into the persistence DTO.
-func toDto(model *Todo) TodoDto {
+func toDto(model *TodoGorm) TodoDto {
 	return TodoDto{
 		ID:        model.ID,
 		Title:     model.Title,

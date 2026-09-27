@@ -37,7 +37,7 @@ func (s *TodoStatus) Scan(value any) error {
 	return nil
 }
 
-type Todo struct {
+type TodoGorm struct {
 	ID        uint       `json:"id" gorm:"primaryKey"`
 	Title     string     `json:"title"`
 	Status    TodoStatus `json:"status" gorm:"type:varchar(20);not null;default:pending"`
@@ -46,7 +46,7 @@ type Todo struct {
 }
 
 // BeforeCreate defaults a new record's status to Pending when unset.
-func (t *Todo) BeforeCreate(tx *gorm.DB) error {
+func (t *TodoGorm) BeforeCreate(tx *gorm.DB) error {
 	if t.Status == "" {
 		t.Status = Pending
 	}

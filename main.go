@@ -22,7 +22,7 @@ func main() {
 	db := database.Connect()
 
 	// Create/update tables for the models.
-	if err := db.AutoMigrate(&todo.Todo{}); err != nil {
+	if err := db.AutoMigrate(&todo.TodoGorm{}); err != nil {
 		log.Fatalf("failed to migrate database: %v", err)
 	}
 

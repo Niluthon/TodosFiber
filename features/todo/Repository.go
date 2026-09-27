@@ -25,7 +25,7 @@ type TodoRepositoryInterface interface {
 // TodoRepository is the GORM-backed adapter for the TodoRepositoryInterface port. The
 // database handle is injected through NewTodoRepository, keeping the storage
 // engine replaceable and the type easy to fake in tests. It is also the only
-// place in the package that knows about the Todo ORM model.
+// place in the package that knows about the TodoGorm ORM model.
 type TodoRepository struct {
 	db *gorm.DB
 }
@@ -63,7 +63,7 @@ func (r *TodoRepository) Update(dto TodoDto) (TodoDto, error) {
 // Delete removes the todo with the given id. It returns ErrNotFound when no
 // row was affected.
 func (r *TodoRepository) Delete(id uint) error {
-	result := r.db.Delete(&Todo{}, id)
+	result := r.db.Delete(&TodoGorm{}, id)
 	if result.Error != nil {
 		return fmt.Errorf("delete todo %d: %w", id, result.Error)
 	}
@@ -75,7 +75,7 @@ func (r *TodoRepository) Delete(id uint) error {
 
 // GetByID returns the todo with the given id as a DTO, or ErrNotFound.
 func (r *TodoRepository) GetByID(id uint) (TodoDto, error) {
-	var model Todo
+	var model TodoGorm
 	if err := r.db.First(&model, id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return TodoDto{}, ErrNotFound
@@ -92,7 +92,7 @@ func (r *TodoRepository) List(filter ListTodosQuery) ([]TodoDto, error) {
 		filter.Page = 1
 	}
 
-	query := r.db.Model(&Todo{}).
+	query := r.db.Model(&TodoGorm{}).
 		Order("created_at DESC, id DESC")
 
 	if filter.Status != "" {
@@ -102,7 +102,7 @@ func (r *TodoRepository) List(filter ListTodosQuery) ([]TodoDto, error) {
 		query = query.Offset((filter.Page - 1) * filter.Limit).Limit(filter.Limit)
 	}
 
-	var models []Todo
+	var models []TodoGorm
 	if err := query.Find(&models).Error; err != nil {
 		return nil, fmt.Errorf("list todos: %w", err)
 	}
