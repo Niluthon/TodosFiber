@@ -19,7 +19,7 @@ type TodoRepositoryInterface interface {
 	Update(todo TodoDto) (TodoDto, error)
 	Delete(id uint) error
 	GetByID(id uint) (TodoDto, error)
-	List(filter ListFilter) ([]TodoDto, error)
+	List(filter ListTodosQuery) ([]TodoDto, error)
 }
 
 // TodoRepository is the GORM-backed adapter for the TodoRepositoryInterface port. The
@@ -38,30 +38,6 @@ var _ TodoRepositoryInterface = (*TodoRepository)(nil)
 // NewTodoRepository returns a TodoRepository backed by db.
 func NewTodoRepository(db *gorm.DB) *TodoRepository {
 	return &TodoRepository{db: db}
-}
-
-// toModel builds a GORM model from the persistence DTO. It is the only place a
-// Todo record is constructed, keeping ORM details out of the service layer.
-func toModel(dto TodoDto) *Todo {
-	return &Todo{
-		ID:        dto.ID,
-		Title:     dto.Title,
-		Status:    dto.Status,
-		DueDate:   dto.DueDate,
-		CreatedAt: dto.CreatedAt,
-	}
-}
-
-// toDto maps a GORM model back into the persistence DTO. It is the only place an
-// ORM record is exposed to the service layer.
-func toDto(t *Todo) TodoDto {
-	return TodoDto{
-		ID:        t.ID,
-		Title:     t.Title,
-		Status:    t.Status,
-		DueDate:   t.DueDate,
-		CreatedAt: t.CreatedAt,
-	}
 }
 
 // Create inserts a new todo built from dto and returns it with the generated
@@ -111,7 +87,7 @@ func (r *TodoRepository) GetByID(id uint) (TodoDto, error) {
 
 // List returns todos newest first, optionally filtered by status and paginated.
 // A filter with Limit <= 0 returns every match.
-func (r *TodoRepository) List(filter ListFilter) ([]TodoDto, error) {
+func (r *TodoRepository) List(filter ListTodosQuery) ([]TodoDto, error) {
 	if filter.Page < 1 {
 		filter.Page = 1
 	}
