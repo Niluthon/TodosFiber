@@ -2,43 +2,52 @@ package main
 
 import (
 	"log"
+	"os"
 
+	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v3"
+	"github.com/gofiber/fiber/v3/middleware/logger"
+
+	"TodosFiber/database"
+	"TodosFiber/features/todo"
 )
 
+type structValidator struct {
+	validator *validator.Validate
+}
+
+func (v *structValidator) Validate(out interface{}) error { return v.validator.Struct(out) }
+
 func main() {
-	app := fiber.New()
+	db := database.Connect()
 
-	api := app.Group("/api")
+	// Create/update tables for the models.
+	if err := db.AutoMigrate(&todo.Todo{}); err != nil {
+		log.Fatalf("failed to migrate database: %v", err)
+	}
 
-	v1 := api.Group("/v1")
+	// Wire the layers: database -> repository -> service -> handler.
+	repo := todo.NewTodoRepository(db)
+	svc := todo.NewTodoService(repo)
+	handler := todo.NewTodoHandler(svc)
 
-	v1.Route("/tasks", func(router fiber.Router) {
-		router.Post("/", func(c fiber.Ctx) error {
-			return c.JSON(fiber.Map{
-				"success": true,
-			})
-		})
+	app := fiber.New(
+		fiber.Config{
+			StructValidator: &structValidator{validator: validator.New()},
+		},
+	)
+	app.Use(logger.New())
 
-		router.Get("/", func(c fiber.Ctx) error {
-			return c.SendString("Tasks list")
-		})
+	tasks := app.Group("/tasks")
+	tasks.Post("/", handler.Create)
+	tasks.Get("/", handler.List)
+	tasks.Get("/:id", handler.Get)
+	tasks.Patch("/:id", handler.Update)
+	tasks.Delete("/:id", handler.Delete)
 
-		router.Get("/:id", func(c fiber.Ctx) error {
-			id := c.Params("id")
-			return c.SendString(id)
-		})
-
-		router.Patch("/:id", func(c fiber.Ctx) error {
-			id := c.Params("id")
-			return c.SendString(id)
-		})
-
-		router.Delete("/:id", func(c fiber.Ctx) error {
-			id := c.Params("id")
-			return c.SendString(id)
-		})
-	})
-
-	log.Fatal(app.Listen(":8000"))
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8000"
+	}
+	log.Fatal(app.Listen(":" + port))
 }
