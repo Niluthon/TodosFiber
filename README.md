@@ -73,6 +73,7 @@ curl -X POST localhost:8000/tasks \
 - Refactor error handling to be more consistent and use custom error types with proper error messages.
 - Add Fake data generator for testing purposes (PHP Faker alternative in Golang).
 - Check naming conventions, fix them if needed to follow GoLang best practices.
+- Add package [[github.com/joho/godotenv](https://github.com/joho/godotenv)] Move ENV variables to a `.env` file `.gitignore` it and add a `.env.example` file.
 
 ## Assumptions
 
