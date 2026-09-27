@@ -19,6 +19,14 @@ type structValidator struct {
 func (v *structValidator) Validate(out interface{}) error { return v.validator.Struct(out) }
 
 func main() {
+
+	if err := os.Setenv("PORT", "8000"); err != nil {
+		return
+	}
+	if err := os.Setenv("DB_DSN", "todos.db"); err != nil {
+		return
+	}
+
 	db := database.Connect()
 
 	// Create/update tables for the models.
